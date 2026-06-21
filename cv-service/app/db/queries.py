@@ -1,0 +1,91 @@
+import os
+import psycopg2
+import logging
+import numpy as np
+
+logger = logging.getLogger("cv_service.db")
+logger.setLevel(logging.INFO)
+
+class DatabaseQueries:
+    def __init__(self):
+        # Database URL from environment configuration
+        self.db_url = os.getenv("POSTGRES_URL", "postgresql://postgres:your_password_here@localhost:5432/planogram_compliance")
+
+    def _get_connection(self):
+        return psycopg2.connect(self.db_url)
+
+    def _parse_embedding(self, val):
+        if val is None:
+            return None
+        
+        # 1. If it's already a list or a tuple, cast all elements to float
+        if isinstance(val, (list, tuple)):
+            return [float(x) for x in val]
+            
+        # 2. If it's a string, strip the brackets and split by comma
+        if isinstance(val, str):
+            cleaned = val.strip('[]')
+            if not cleaned:
+                return []
+            return [float(x) for x in cleaned.split(',')]
+            
+        # 3. If it's a memoryview, parse via numpy frombuffer
+        if isinstance(val, memoryview):
+            try:
+                # Try float32 first
+                return np.frombuffer(val, dtype=np.float32).tolist()
+            except Exception:
+                try:
+                    # Fallback to float64
+                    return np.frombuffer(val, dtype=np.float64).tolist()
+                except Exception:
+                    return [float(x) for x in list(val)]
+                    
+        # 4. General fallback
+        try:
+            return [float(x) for x in list(val)]
+        except Exception:
+            logger.warning(f"Could not parse database embedding of type {type(val)}")
+            return None
+
+    def fetch_planogram_cells(self, planogram_id: str):
+        logger.info(f"Connecting to database to fetch planogram cells for planogram: {planogram_id}")
+        query_str = """
+            SELECT c.row, c.position, c.reference_product_id, c.facing_count, r.embedding
+            FROM planogram_cells c
+            JOIN reference_products r ON c.reference_product_id = r.id
+            WHERE c.planogram_id = %s
+            ORDER BY c.row ASC, c.position ASC
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute(query_str, (planogram_id,))
+                rows = cur.fetchall()
+                
+                cells = []
+                for row_data in rows:
+                    row_num, position, product_id, facing_count, embedding_raw = row_data
+                    
+                    embedding = self._parse_embedding(embedding_raw)
+                    
+                    cells.append({
+                        "row": row_num,
+                        "position": position,
+                        "reference_product_id": product_id,
+                        "facing_count": facing_count,
+                        "embedding": embedding
+                    })
+                
+                logger.info(f"Successfully fetched {len(cells)} expected cell configurations from DB.")
+                return cells
+        except Exception as e:
+            logger.error(f"Error fetching planogram cells: {str(e)}")
+            raise e
+        finally:
+            if conn:
+                conn.close()
+
+# Export singleton database helper
+db_queries = DatabaseQueries()

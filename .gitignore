@@ -1,0 +1,24 @@
+# Python environments
+venv/
+.venv/
+cv-service/venv/
+cv-service/.venv/
+
+# Node modules
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
