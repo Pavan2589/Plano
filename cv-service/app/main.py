@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 
 # Load env vars
-load_dotenv()
+load_dotenv(override=True)
 
 from app.routers import health, compliance, embedding
 

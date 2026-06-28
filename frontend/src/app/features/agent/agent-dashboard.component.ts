@@ -420,7 +420,7 @@ export class AgentDashboardComponent implements OnInit, OnDestroy {
     this.stopPolling();
     
     this.pollSub = interval(2000).pipe(
-      switchMap(() => this.api.get<any>(`compliance/jobs/${jobId}`).pipe(
+      switchMap(() => this.api.get<any>(`agent/compliance/jobs/${jobId}`).pipe(
         catchError(() => of(null))
       )),
       takeWhile((job) => {
@@ -450,7 +450,7 @@ export class AgentDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadResults(jobId: string): void {
-    this.api.get<any>(`compliance/results/${jobId}`).subscribe({
+    this.api.get<any>(`agent/compliance/results/${jobId}`).subscribe({
       next: (res) => {
         this.result = res;
         this.notification.success('Planogram analysis completed!');

@@ -5,17 +5,18 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/role');
 const upload = require('../middleware/upload');
 
-// Apply auth and agent check to all routes in this file
+// Apply auth to all routes in this file
 router.use(auth);
-router.use(requireRole('agent'));
+
+const agentOnly = requireRole('agent');
 
 // Stores & Sections
-router.get('/agent/stores', agentController.getAssignedStores);
-router.get('/stores/:id/sections', agentController.getSections);
+router.get('/agent/stores', agentOnly, agentController.getAssignedStores);
+router.get(['/stores/:id/sections', '/agent/stores/:id/sections'], agentOnly, agentController.getSections);
 
 // Compliance Jobs
-router.post('/compliance/jobs', upload.single('image'), agentController.createComplianceJob);
-router.get('/compliance/jobs/:id', agentController.getComplianceJobStatus);
-router.get('/compliance/results/:jobId', agentController.getComplianceResult);
+router.post(['/compliance/jobs', '/agent/compliance/jobs'], agentOnly, upload.single('image'), agentController.createComplianceJob);
+router.get(['/compliance/jobs/:id', '/agent/compliance/jobs/:id'], agentOnly, agentController.getComplianceJobStatus);
+router.get(['/compliance/results/:jobId', '/agent/compliance/results/:jobId'], agentOnly, agentController.getComplianceResult);
 
 module.exports = router;

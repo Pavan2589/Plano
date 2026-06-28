@@ -30,6 +30,9 @@ def upload_to_minio(bucket: str, object_name: str, data: bytes, content_type: st
     # Construct URL
     url = f"http://{host}/{bucket}/{object_name}"
     
+    # Compute actual payload hash
+    payload_hash = hashlib.sha256(data).hexdigest()
+    
     # Compute standard AWS S3 V4 signature
     now = datetime.datetime.utcnow()
     amz_date = now.strftime('%Y%m%dT%H%M%SZ')
@@ -40,7 +43,7 @@ def upload_to_minio(bucket: str, object_name: str, data: bytes, content_type: st
     
     # Create canonical request components
     canonical_uri = f"/{bucket}/{object_name}"
-    canonical_headers = f"host:{host}\nx-amz-content-sha256:unsigned-payload\nx-amz-date:{amz_date}\n"
+    canonical_headers = f"host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n"
     signed_headers = "host;x-amz-content-sha256;x-amz-date"
     
     canonical_request = (
@@ -49,7 +52,7 @@ def upload_to_minio(bucket: str, object_name: str, data: bytes, content_type: st
         "\n"
         f"{canonical_headers}\n"
         f"{signed_headers}\n"
-        "unsigned-payload"
+        f"{payload_hash}"
     )
     
     # Create string to sign
@@ -76,7 +79,7 @@ def upload_to_minio(bucket: str, object_name: str, data: bytes, content_type: st
     
     headers = {
         "x-amz-date": amz_date,
-        "x-amz-content-sha256": "unsigned-payload",
+        "x-amz-content-sha256": payload_hash,
         "Authorization": authorization_header,
         "Content-Type": content_type
     }

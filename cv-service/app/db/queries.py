@@ -9,7 +9,7 @@ logger.setLevel(logging.INFO)
 class DatabaseQueries:
     def __init__(self):
         # Database URL from environment configuration
-        self.db_url = os.getenv("POSTGRES_URL", "postgresql://postgres:your_password_here@localhost:5432/planogram_compliance")
+        self.db_url = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL") or "postgresql://postgres:your_password_here@localhost:5433/planogram_compliance"
 
     def _get_connection(self):
         return psycopg2.connect(self.db_url)

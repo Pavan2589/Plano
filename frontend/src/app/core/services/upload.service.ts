@@ -17,7 +17,7 @@ export class UploadService {
     formData.append('name', name);
     formData.append('skuCode', skuCode);
     formData.append('image', file);
-    return this.http.post<any>(`${this.baseUrl}/admin/reference-products`, formData);
+    return this.http.post<any>(`${this.baseUrl}/reference-products`, formData);
   }
 
   uploadShelfImage(storeId: string, sectionId: string, planogramId: string | null, file: File): Observable<any> {
@@ -28,7 +28,7 @@ export class UploadService {
       formData.append('planogramId', planogramId);
     }
     formData.append('image', file);
-    return this.http.post<any>(`${this.baseUrl}/compliance/jobs`, formData);
+    return this.http.post<any>(`${this.baseUrl}/agent/compliance/jobs`, formData);
   }
 
   uploadShelfImageWithProgress(storeId: string, sectionId: string, planogramId: string | null, file: File): Observable<HttpEvent<any>> {
@@ -39,7 +39,7 @@ export class UploadService {
       formData.append('planogramId', planogramId);
     }
     formData.append('image', file);
-    return this.http.post<any>(`${this.baseUrl}/compliance/jobs`, formData, {
+    return this.http.post<any>(`${this.baseUrl}/agent/compliance/jobs`, formData, {
       observe: 'events',
       reportProgress: true
     });

@@ -23,22 +23,22 @@ class TestProductDetector(unittest.TestCase):
         detector = ProductDetector()
         
         mock_box_valid = MagicMock()
-        mock_box_valid.xyxy = [[10.0, 20.0, 150.0, 250.0]]
+        mock_box_valid.xyxy = [np.array([10.0, 20.0, 150.0, 250.0])]
         mock_box_valid.conf = [MagicMock(item=lambda: 0.95)]
         
         # Coordinate Flipped Box (x1 > x2) -> should be filtered
         mock_box_flipped_coords = MagicMock()
-        mock_box_flipped_coords.xyxy = [[150.0, 250.0, 10.0, 20.0]]
+        mock_box_flipped_coords.xyxy = [np.array([150.0, 250.0, 10.0, 20.0])]
         mock_box_flipped_coords.conf = [MagicMock(item=lambda: 0.90)]
 
         # Negative Coordinate Box -> should be filtered
         mock_box_negative = MagicMock()
-        mock_box_negative.xyxy = [[-10.0, 20.0, 150.0, 250.0]]
+        mock_box_negative.xyxy = [np.array([-10.0, 20.0, 150.0, 250.0])]
         mock_box_negative.conf = [MagicMock(item=lambda: 0.85)]
 
         # Out of bounds confidence (> 1.0) -> should be filtered
         mock_box_invalid_conf = MagicMock()
-        mock_box_invalid_conf.xyxy = [[15.0, 25.0, 160.0, 260.0]]
+        mock_box_invalid_conf.xyxy = [np.array([15.0, 25.0, 160.0, 260.0])]
         mock_box_invalid_conf.conf = [MagicMock(item=lambda: 1.25)]
 
         mock_result = MagicMock()
