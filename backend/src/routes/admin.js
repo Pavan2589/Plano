@@ -35,6 +35,7 @@ router.post('/agent-assignments', adminOnly, adminController.assignAgent);
 
 // Reference Products
 router.post('/reference-products', adminOnly, upload.single('image'), adminController.uploadReferenceProduct);
+router.get('/reference-products', adminOnly, adminController.listReferenceProducts);
 router.get('/reference-products/:id/status', adminOnly, adminController.checkEmbeddingStatus);
 
 // Planograms

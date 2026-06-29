@@ -10,6 +10,13 @@ export interface Violation {
   violation_type: string;
   expected_product_id?: string | null;
   detected_product_id?: string | null;
+  expected_product_name?: string | null;
+  detected_product_name?: string | null;
+  similarity?: number | null;
+  expected_facing_count?: number | null;
+  detected_facing_count?: number | null;
+  display_title?: string | null;
+  display_details?: string[] | null;
   expected_gap?: number | null;
   detected_gap?: number | null;
 }
@@ -39,22 +46,27 @@ export interface Violation {
             </nz-tag>
           </td>
           <td>
-            <span class="product-id-text">{{ data.expected_product_id || 'N/A' }}</span>
+            <strong>{{ data.expected_product_name || data.expected_product_id || 'N/A' }}</strong>
           </td>
           <td>
-            <span *ngIf="data.violation_type === 'gap_violation'">
-              Gap: {{ data.detected_gap != null ? (data.detected_gap * 100 | number:'1.0-1') + '%' : 'N/A' }} 
-              (Expected: &lt; {{ data.expected_gap != null ? (data.expected_gap * 100 | number:'1.0-1') + '%' : '5%' }})
-            </span>
-            <span *ngIf="data.violation_type === 'facing_violation'">
-              Facing Count Deficit
-            </span>
-            <span *ngIf="data.violation_type === 'wrong_product'">
-              Product Mismatch
-            </span>
-            <span *ngIf="data.violation_type === 'missing_product'">
-              Product Missing
-            </span>
+            <div *ngIf="data.display_details?.length; else legacyDetails" class="violation-details">
+              <div *ngFor="let detail of data.display_details">{{ detail }}</div>
+            </div>
+            <ng-template #legacyDetails>
+              <span *ngIf="data.violation_type === 'gap_violation'">
+                Gap: {{ data.detected_gap != null ? (data.detected_gap * 100 | number:'1.0-1') + '%' : 'N/A' }} 
+                (Expected: &lt; {{ data.expected_gap != null ? (data.expected_gap * 100 | number:'1.0-1') + '%' : '5%' }})
+              </span>
+              <span *ngIf="data.violation_type === 'facing_violation'">
+                Facing Count Deficit
+              </span>
+              <span *ngIf="data.violation_type === 'wrong_product'">
+                Product Mismatch
+              </span>
+              <span *ngIf="data.violation_type === 'missing_product'">
+                Product Missing
+              </span>
+            </ng-template>
           </td>
         </tr>
       </tbody>
@@ -65,6 +77,10 @@ export interface Violation {
       font-family: monospace;
       font-size: 0.85rem;
       color: #555;
+    }
+    .violation-details {
+      line-height: 1.5;
+      white-space: pre-line;
     }
   `]
 })

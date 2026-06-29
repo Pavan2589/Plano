@@ -40,6 +40,13 @@ class ViolationItem(BaseModel):
     violation_type: str
     expected_product_id: Optional[str] = None
     detected_product_id: Optional[str] = None
+    expected_product_name: Optional[str] = None
+    detected_product_name: Optional[str] = None
+    similarity: Optional[float] = None
+    expected_facing_count: Optional[int] = None
+    detected_facing_count: Optional[int] = None
+    display_title: Optional[str] = None
+    display_details: Optional[List[str]] = None
     bbox: Optional[List[float]] = None
     expected_gap: Optional[float] = None
     detected_gap: Optional[float] = None
@@ -61,6 +68,140 @@ class ComplianceResponse(BaseModel):
     annotated_image_url: str
     violations: List[ViolationItem]
     matched_products: List[MatchedProductItem]
+
+def _bbox_key(bbox: Optional[List[float]]) -> Optional[tuple]:
+    if not bbox:
+        return None
+    return tuple(round(float(x), 2) for x in bbox)
+
+def _enrich_violation_debug_details(
+    violations: List[Dict[str, Any]],
+    matched_products: List[Dict[str, Any]],
+    expected_cells: List[Dict[str, Any]],
+    detections: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    product_by_id = {}
+    expected_by_slot = {}
+    for cell in expected_cells:
+        product_id = str(cell["reference_product_id"])
+        product_by_id[product_id] = {
+            "id": product_id,
+            "name": cell.get("product_name") or product_id,
+            "sku_code": cell.get("sku_code"),
+            "embedding": cell.get("embedding")
+        }
+        expected_by_slot[(cell["row"], cell["position"])] = cell
+
+    detections_by_bbox = {
+        _bbox_key(det.get("bbox")): det
+        for det in detections
+        if det.get("bbox")
+    }
+
+    matched_counts = {}
+    for match in matched_products:
+        slot = (match["row"], match["position"])
+        matched_counts[slot] = matched_counts.get(slot, 0) + 1
+
+    wrong_counts = {}
+    for violation in violations:
+        if violation["violation_type"] == "wrong_product":
+            slot = (violation["row"], violation["position"])
+            wrong_counts[slot] = wrong_counts.get(slot, 0) + 1
+
+    enriched = []
+    for violation in violations:
+        item = dict(violation)
+        slot = (item["row"], item["position"])
+        expected_cell = expected_by_slot.get(slot)
+        expected_product = product_by_id.get(str(item.get("expected_product_id")))
+        if expected_product:
+            item["expected_product_name"] = expected_product["name"]
+
+        if expected_cell:
+            item["expected_facing_count"] = int(expected_cell.get("facing_count") or 1)
+
+        detection = detections_by_bbox.get(_bbox_key(item.get("bbox")))
+        if detection and expected_product and expected_product.get("embedding"):
+            item["similarity"] = round(
+                matcher_instance.calculate_similarity(expected_product["embedding"], detection.get("embedding")),
+                4
+            )
+
+            best_product = None
+            best_similarity = -1.0
+            for candidate in product_by_id.values():
+                candidate_embedding = candidate.get("embedding")
+                if not candidate_embedding:
+                    continue
+                similarity = matcher_instance.calculate_similarity(candidate_embedding, detection.get("embedding"))
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_product = candidate
+
+            if best_product:
+                item["detected_product_id"] = best_product["id"]
+                item["detected_product_name"] = best_product["name"]
+
+        if item["violation_type"] == "wrong_product":
+            item["display_title"] = "Wrong Product"
+            item["display_details"] = [
+                f"Expected: {item.get('expected_product_name') or item.get('expected_product_id') or 'Unknown'}",
+                f"Detected: {item.get('detected_product_name') or 'Unknown'}",
+                f"Similarity: {item['similarity']:.2f}" if item.get("similarity") is not None else "Similarity: N/A"
+            ]
+        elif item["violation_type"] == "missing_product":
+            item["display_title"] = "Missing Product"
+            item["display_details"] = [
+                f"Expected: {item.get('expected_product_name') or item.get('expected_product_id') or 'Unknown'}"
+            ]
+        elif item["violation_type"] == "facing_violation":
+            detected_count = matched_counts.get(slot, 0) + wrong_counts.get(slot, 0)
+            item["detected_facing_count"] = detected_count
+            item["display_title"] = "Facing Violation"
+            item["display_details"] = [
+                f"Expected: {item.get('expected_product_name') or item.get('expected_product_id') or 'Unknown'}",
+                f"Expected Facing Count: {item.get('expected_facing_count', 'N/A')}",
+                f"Detected Facing Count: {detected_count}"
+            ]
+        elif item["violation_type"] == "gap_violation":
+            item["display_title"] = "Empty Slot"
+            item["display_details"] = [
+                f"Expected: {item.get('expected_product_name') or item.get('expected_product_id') or 'Unknown'}"
+            ]
+
+        enriched.append(item)
+
+    return enriched
+
+def _add_embedding_nearest_neighbour_debug(
+    detections: List[Dict[str, Any]],
+    reference_products: List[Dict[str, Any]],
+    top_k: int = 5
+) -> None:
+    for det_idx, detection in enumerate(detections, start=1):
+        ranked_matches = []
+        for product in reference_products:
+            similarity = matcher_instance.calculate_similarity(
+                detection.get("embedding"),
+                product.get("embedding")
+            )
+            ranked_matches.append({
+                "id": product["id"],
+                "name": product["name"],
+                "sku_code": product.get("sku_code"),
+                "similarity": round(similarity, 4)
+            })
+
+        ranked_matches.sort(key=lambda item: item["similarity"], reverse=True)
+        detection["embedding_top_matches"] = ranked_matches[:top_k]
+
+        print(f"Detection #{det_idx}")
+        print("--------------------------------")
+        for rank, match in enumerate(detection["embedding_top_matches"], start=1):
+            label = match["name"] or match.get("sku_code") or match["id"]
+            print(f"{rank}. {label:<20} {match['similarity']:.3f}")
+        print("")
 
 @router.post("/compliance", response_model=ComplianceResponse)
 async def process_compliance(payload: ComplianceRequest):
@@ -103,6 +244,7 @@ async def process_compliance(payload: ComplianceRequest):
     # 3. Step 1 & 2: YOLOv8 Detection
     try:
         detections = detector_instance.detect(image)
+        detector_instance.save_debug_detections(image, detections, payload.jobId)
     except Exception as e:
         logger.error(f"YOLOv8 inference failed: {str(e)}")
         raise HTTPException(
@@ -134,6 +276,15 @@ async def process_compliance(payload: ComplianceRequest):
             
     elapsed_embed = time.time() - start_embed_time
     logger.info(f"Generated embeddings for {len(detections)} products in {elapsed_embed:.3f} seconds.")
+
+    # Debug-only nearest-neighbour check for YOLO bbox -> crop -> embedding -> reference product.
+    # This runs before planogram fetching, Needleman-Wunsch alignment, violations, or scoring.
+    try:
+        reference_products = db_queries.fetch_reference_product_embeddings()
+        _add_embedding_nearest_neighbour_debug(detections, reference_products)
+        annotator_instance.save_embedding_matches_debug(image, detections, payload.jobId)
+    except Exception as e:
+        logger.error(f"Embedding nearest-neighbour debug image failed (non-fatal, continuing): {str(e)}")
 
     # 5. Fetch active planogram cells from DB
     try:
@@ -167,7 +318,12 @@ async def process_compliance(payload: ComplianceRequest):
         )
 
     matched_products = match_results["matched_products"]
-    violations = match_results["violations"]
+    violations = _enrich_violation_debug_details(
+        violations=match_results["violations"],
+        matched_products=matched_products,
+        expected_cells=expected_cells,
+        detections=detections
+    )
 
     # 7. Step 8: Compliance Scoring
     try:

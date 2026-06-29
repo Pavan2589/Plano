@@ -208,9 +208,21 @@ const agentController = {
       `;
       const violationsResult = await query(violationsQuery, [result.id]);
 
+      let richViolations = result.violations_json;
+      if (typeof richViolations === 'string') {
+        try {
+          richViolations = JSON.parse(richViolations);
+        } catch (err) {
+          richViolations = null;
+        }
+      }
+      if (!Array.isArray(richViolations)) {
+        richViolations = violationsResult.rows;
+      }
+
       res.status(200).json({
         ...result,
-        violations: violationsResult.rows
+        violations: richViolations
       });
     } catch (err) {
       next(err);

@@ -1,7 +1,9 @@
 import os
 import time
 import logging
+from pathlib import Path
 from PIL import Image
+from PIL import ImageDraw, ImageFont
 from typing import List, Dict, Any
 from ultralytics import YOLO
 
@@ -17,7 +19,7 @@ if not logger.handlers:
 class ProductDetector:
     def __init__(self):
         # Configurable model path and confidence threshold
-        self.model_path = os.getenv("YOLO_MODEL_PATH", "yolov8n.pt")
+        self.model_path = os.getenv("YOLO_MODEL_PATH", "best.pt")
         self.confidence = float(os.getenv("YOLO_CONFIDENCE", "0.25"))
         
         logger.info(f"Loading YOLOv8 model from {self.model_path} once during startup...")
@@ -41,6 +43,15 @@ class ProductDetector:
                 # Extract coordinates and confidence score
                 xyxy = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
                 conf = float(box.conf[0].item())
+                class_id = int(box.cls[0].item()) if getattr(box, "cls", None) is not None else None
+                class_name = None
+                if class_id is not None:
+                    if isinstance(self.model.names, dict):
+                        class_name = self.model.names.get(class_id, str(class_id))
+                    elif isinstance(self.model.names, (list, tuple)) and class_id < len(self.model.names):
+                        class_name = self.model.names[class_id]
+                    else:
+                        class_name = str(class_id)
                 
                 x1, y1, x2, y2 = xyxy
                 
@@ -56,12 +67,49 @@ class ProductDetector:
                 
                 detections.append({
                     "bbox": [round(float(x1), 2), round(float(y1), 2), round(float(x2), 2), round(float(y2), 2)],
-                    "confidence": round(conf, 4)
+                    "confidence": round(conf, 4),
+                    "class_id": class_id,
+                    "class_name": class_name
                 })
         
         elapsed = time.time() - start_time
         logger.info(f"YOLOv8 inference completed: found {len(detections)} products in {elapsed:.4f} seconds.")
         return detections
+
+    def save_debug_detections(self, image: Image.Image, detections: List[Dict[str, Any]], job_id: str = None) -> str:
+        debug_dir = Path("debug")
+        debug_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"yolo_{job_id}.jpg" if job_id else f"yolo_detections_{int(time.time())}.jpg"
+        output_path = debug_dir / filename
+
+        annotated = image.copy()
+        draw = ImageDraw.Draw(annotated)
+        try:
+            font = ImageFont.load_default()
+        except Exception as e:
+            logger.warning(f"Failed to load default font for YOLO debug image: {str(e)}")
+            font = None
+
+        for idx, det in enumerate(detections, start=1):
+            bbox = det["bbox"]
+            class_name = det.get("class_name") or "unknown"
+            confidence = det.get("confidence")
+
+            print(f"Detection {idx}")
+            print(f"Class: {class_name}")
+            print(f"Confidence: {confidence}")
+            print(f"BBox: {bbox}")
+            print("")
+
+            label = f"{class_name} {confidence:.2f}" if isinstance(confidence, (int, float)) else class_name
+            draw.rectangle(bbox, outline="yellow", width=3)
+            draw.text((bbox[0], max(0, bbox[1] - 14)), label, fill="yellow", font=font)
+
+        annotated.save(output_path, format="JPEG")
+        logger.info(f"Saved YOLO detections to {output_path}")
+        print(f"Saved YOLO detections to {output_path}")
+        return str(output_path)
 
 # Instantiate singleton detector
 detector_instance = ProductDetector()

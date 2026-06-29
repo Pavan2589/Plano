@@ -51,7 +51,7 @@ class DatabaseQueries:
     def fetch_planogram_cells(self, planogram_id: str):
         logger.info(f"Connecting to database to fetch planogram cells for planogram: {planogram_id}")
         query_str = """
-            SELECT c.row, c.position, c.reference_product_id, c.facing_count, r.embedding
+            SELECT c.row, c.position, c.reference_product_id, c.facing_count, r.embedding, r.name, r.sku_code
             FROM planogram_cells c
             JOIN reference_products r ON c.reference_product_id = r.id
             WHERE c.planogram_id = %s
@@ -66,7 +66,7 @@ class DatabaseQueries:
                 
                 cells = []
                 for row_data in rows:
-                    row_num, position, product_id, facing_count, embedding_raw = row_data
+                    row_num, position, product_id, facing_count, embedding_raw, product_name, sku_code = row_data
                     
                     embedding = self._parse_embedding(embedding_raw)
                     
@@ -75,13 +75,55 @@ class DatabaseQueries:
                         "position": position,
                         "reference_product_id": product_id,
                         "facing_count": facing_count,
-                        "embedding": embedding
+                        "embedding": embedding,
+                        "product_name": product_name,
+                        "sku_code": sku_code
                     })
                 
                 logger.info(f"Successfully fetched {len(cells)} expected cell configurations from DB.")
                 return cells
         except Exception as e:
             logger.error(f"Error fetching planogram cells: {str(e)}")
+            raise e
+        finally:
+            if conn:
+                conn.close()
+
+    def fetch_reference_product_embeddings(self):
+        logger.info("Connecting to database to fetch completed reference product embeddings.")
+        query_str = """
+            SELECT id, name, sku_code, embedding
+            FROM reference_products
+            WHERE embedding_status = 'complete'
+              AND embedding IS NOT NULL
+            ORDER BY name ASC, sku_code ASC
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute(query_str)
+                rows = cur.fetchall()
+
+                products = []
+                for row_data in rows:
+                    product_id, name, sku_code, embedding_raw = row_data
+                    embedding = self._parse_embedding(embedding_raw)
+                    if not embedding:
+                        logger.warning(f"Skipping reference product {product_id}; embedding is empty or unreadable.")
+                        continue
+
+                    products.append({
+                        "id": str(product_id),
+                        "name": name,
+                        "sku_code": sku_code,
+                        "embedding": embedding
+                    })
+
+                logger.info(f"Successfully fetched {len(products)} completed reference product embeddings.")
+                return products
+        except Exception as e:
+            logger.error(f"Error fetching reference product embeddings: {str(e)}")
             raise e
         finally:
             if conn:

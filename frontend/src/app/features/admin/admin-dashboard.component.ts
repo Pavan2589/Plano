@@ -853,9 +853,12 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   }
 
   loadReferenceProducts(): void {
-    // The backend has no reference-product listing endpoint. Keep products
-    // uploaded during this session and poll their supported status endpoints.
-    this.products.forEach(product => this.startEmbeddingStatusPolling(product.id));
+    this.api.get<any[]>('reference-products').subscribe({
+      next: (data) => {
+        this.products = data;
+      },
+      error: (err) => this.notification.error(err.error?.error || 'Failed to load reference products')
+    });
   }
 
   // --- Clients & Stores ---

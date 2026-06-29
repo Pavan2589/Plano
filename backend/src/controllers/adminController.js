@@ -283,6 +283,20 @@ const adminController = {
     }
   },
 
+  listReferenceProducts: async (req, res, next) => {
+    try {
+      const result = await query(`
+        SELECT id, client_id, name, sku_code, image_url, embedding_status, created_at
+        FROM reference_products
+        WHERE embedding_status = 'complete'
+        ORDER BY name ASC, sku_code ASC
+      `);
+      res.status(200).json(result.rows);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   checkEmbeddingStatus: async (req, res, next) => {
     try {
       const { id } = req.params;

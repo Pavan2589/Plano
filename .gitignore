@@ -22,3 +22,16 @@ build/
 
 # Logs
 *.log
+
+# ML models
+*.pt
+
+# Debug outputs
+debug/
+cv-service/debug/
+
+# Test cache
+.pytest_cache/
+
+# VS Code
+.vscode/

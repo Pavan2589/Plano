@@ -15,7 +15,7 @@ class TestProductDetector(unittest.TestCase):
     def test_detector_initialization(self, mock_yolo):
         # Verify YOLO model gets loaded with config path
         detector = ProductDetector()
-        mock_yolo.assert_called_once_with("yolov8n.pt")
+        mock_yolo.assert_called_once_with("best.pt")
 
     @patch('app.services.detector.YOLO')
     def test_bbox_and_confidence_validation(self, mock_yolo):

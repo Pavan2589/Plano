@@ -44,7 +44,7 @@ CREATE TABLE sections (
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR NOT NULL,
-  email VARCHAR NOT NULL, -- Unique constraint is handled via lower case-insensitive index
+  email VARCHAR NOT NULL UNIQUE, -- Unique constraint is handled via lower case-insensitive index
   password_hash VARCHAR NOT NULL,
   role user_role NOT NULL,
   client_id UUID REFERENCES clients(id) ON DELETE RESTRICT,
