@@ -12,7 +12,8 @@ const minioClient = new Minio.Client({
 const REQUIRED_BUCKETS = [
   'shelf-images',
   'reference-products',
-  'annotated-results'
+  'annotated-results',
+  'reference-planograms'
 ];
 
 async function initializeMinio() {

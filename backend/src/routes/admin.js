@@ -43,6 +43,8 @@ router.get('/planograms', adminOnly, adminController.listPlanograms);
 router.post('/planograms', adminOnly, adminController.createPlanogram);
 router.post('/planograms/:id/cells', adminOnly, adminController.definePlanogramCells);
 router.patch('/planograms/:id/activate', adminOnly, adminController.activatePlanogram);
+router.post('/planograms/:id/generate-from-image', adminOnly, upload.single('image'), adminController.generatePlanogramFromImage);
+router.post('/planograms/:id/confirm-cells', adminOnly, adminController.confirmPlanogramCells);
 
 // Flags
 router.get('/flags', adminOnly, adminController.listFlags);

@@ -89,6 +89,68 @@ class DatabaseQueries:
             if conn:
                 conn.close()
 
+    def fetch_planogram_client_id(self, planogram_id: str) -> str:
+        logger.info(f"Fetching client_id for planogram: {planogram_id}")
+        query_str = """
+            SELECT st.client_id
+            FROM planograms p
+            JOIN sections sec ON p.section_id = sec.id
+            JOIN stores st ON sec.store_id = st.id
+            WHERE p.id = %s
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute(query_str, (planogram_id,))
+                row = cur.fetchone()
+                if not row:
+                    raise ValueError(f"Planogram {planogram_id} not found or has no associated client")
+                return str(row[0])
+        except Exception as e:
+            logger.error(f"Error fetching client_id for planogram {planogram_id}: {str(e)}")
+            raise e
+        finally:
+            if conn:
+                conn.close()
+
+    def fetch_all_reference_products(self, client_id: str) -> list:
+        logger.info(f"Fetching all reference products for client: {client_id}")
+        query_str = """
+            SELECT id, name, sku_code, embedding
+            FROM reference_products
+            WHERE client_id = %s AND embedding_status = 'complete'
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute(query_str, (client_id,))
+                rows = cur.fetchall()
+
+                products = []
+                for row_data in rows:
+                    product_id, name, sku_code, embedding_raw = row_data
+                    embedding = self._parse_embedding(embedding_raw)
+                    if not embedding:
+                        logger.warning(f"Skipping reference product {product_id}; embedding is empty or unreadable.")
+                        continue
+                    products.append({
+                        "id": str(product_id),
+                        "name": name,
+                        "sku_code": sku_code,
+                        "embedding": embedding
+                    })
+
+                logger.info(f"Fetched {len(products)} reference products for client {client_id}.")
+                return products
+        except Exception as e:
+            logger.error(f"Error fetching reference products for client {client_id}: {str(e)}")
+            raise e
+        finally:
+            if conn:
+                conn.close()
+
     def fetch_reference_product_embeddings(self):
         logger.info("Connecting to database to fetch completed reference product embeddings.")
         query_str = """

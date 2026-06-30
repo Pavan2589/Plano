@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Load env vars
 load_dotenv(override=True)
 
-from app.routers import health, compliance, embedding
+from app.routers import health, compliance, embedding, planogram_gen
 
 app = FastAPI(
     title="Planogram Compliance CV Microservice",
@@ -17,6 +17,7 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(compliance.router, prefix="/process", tags=["compliance"])
 app.include_router(embedding.router, prefix="/process", tags=["embedding"])
+app.include_router(planogram_gen.router, prefix="/process", tags=["planogram_gen"])
 
 @app.get("/")
 def read_root():

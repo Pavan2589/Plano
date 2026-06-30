@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const sharp = require('sharp');
+const axios = require('axios');
 const { pool, query } = require('../config/db');
 const { minioClient } = require('../config/minio');
 const env = require('../config/env');
@@ -440,6 +441,112 @@ const adminController = {
 
       await pgClient.query('COMMIT');
       res.status(200).json({ success: true, message: 'Planogram activated successfully' });
+    } catch (err) {
+      await pgClient.query('ROLLBACK');
+      next(err);
+    } finally {
+      pgClient.release();
+    }
+  },
+
+  // --- Planogram Generation from Reference Image ---
+  generatePlanogramFromImage: async (req, res, next) => {
+    try {
+      const { id: planogramId } = req.params;
+      const file = req.file;
+
+      if (!file) {
+        throw new ValidationError('Reference image file is required', 'MISSING_IMAGE');
+      }
+
+      // Validate planogram exists and is inactive
+      const planogramCheck = await query(
+        'SELECT id, is_active FROM planograms WHERE id = $1',
+        [planogramId]
+      );
+      if (planogramCheck.rows.length === 0) {
+        throw new NotFoundError('Planogram not found', 'PLANOGRAM_NOT_FOUND');
+      }
+      if (planogramCheck.rows[0].is_active) {
+        throw new ValidationError('Planogram must be inactive to generate cells from an image', 'PLANOGRAM_ALREADY_ACTIVE');
+      }
+
+      // Process image with sharp (1920x1920 max, preserving aspect ratio)
+      const processedBuffer = await sharp(file.buffer)
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .toFormat('jpeg')
+        .toBuffer();
+
+      // Upload to MinIO "reference-planograms" bucket
+      const objectName = `${planogramId}_ref.jpg`;
+      const bucketName = 'reference-planograms';
+
+      await minioClient.putObject(
+        bucketName,
+        objectName,
+        processedBuffer,
+        processedBuffer.length,
+        { 'Content-Type': 'image/jpeg' }
+      );
+
+      // Call CV service to generate planogram cells
+      const cvUrl = `${env.CV_SERVICE_URL}/process/generate-planogram`;
+      const cvResponse = await axios.post(cvUrl, {
+        planogramId,
+        referenceImagePath: objectName
+      });
+
+      res.status(200).json(cvResponse.data);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  confirmPlanogramCells: async (req, res, next) => {
+    const { id: planogramId } = req.params;
+    const { cells, numRows, refImageWidth } = req.body;
+
+    if (!Array.isArray(cells) || cells.length === 0) {
+      return next(new ValidationError('cells must be a non-empty array', 'INVALID_CELLS_PAYLOAD'));
+    }
+    if (numRows === undefined || refImageWidth === undefined) {
+      return next(new ValidationError('numRows and refImageWidth are required', 'MISSING_FIELDS'));
+    }
+
+    const planogramCheck = await query('SELECT id FROM planograms WHERE id = $1', [planogramId]);
+    if (planogramCheck.rows.length === 0) {
+      return next(new NotFoundError('Planogram not found', 'PLANOGRAM_NOT_FOUND'));
+    }
+
+    const pgClient = await pool.connect();
+    try {
+      await pgClient.query('BEGIN');
+
+      // Delete existing cells
+      await pgClient.query('DELETE FROM planogram_cells WHERE planogram_id = $1', [planogramId]);
+
+      // Bulk insert new cells
+      const insertQuery = `
+        INSERT INTO planogram_cells (id, planogram_id, row, position, reference_product_id, facing_count)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `;
+      for (const cell of cells) {
+        const { row, position, referenceProductId, facingCount } = cell;
+        if (row === undefined || position === undefined || !referenceProductId) {
+          throw new ValidationError('Each cell must specify row, position, and referenceProductId', 'INVALID_CELL_DATA');
+        }
+        const cellId = uuidv4();
+        await pgClient.query(insertQuery, [cellId, planogramId, row, position, referenceProductId, facingCount || 1]);
+      }
+
+      // Update planogram metadata
+      await pgClient.query(
+        'UPDATE planograms SET num_rows = $1, ref_image_width = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        [numRows, refImageWidth, planogramId]
+      );
+
+      await pgClient.query('COMMIT');
+      res.status(200).json({ success: true, cellCount: cells.length });
     } catch (err) {
       await pgClient.query('ROLLBACK');
       next(err);

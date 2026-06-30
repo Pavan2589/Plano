@@ -210,3 +210,7 @@ CREATE INDEX idx_comp_violations_result_id ON compliance_violations(result_id);
 CREATE INDEX idx_ref_products_embedding_status ON reference_products(embedding_status);
 CREATE INDEX idx_comp_jobs_status ON compliance_jobs(status);
 CREATE INDEX idx_store_flags_is_active ON store_flags(is_active);
+
+-- Planogram generation columns
+ALTER TABLE planograms ADD COLUMN IF NOT EXISTS num_rows INTEGER;
+ALTER TABLE planograms ADD COLUMN IF NOT EXISTS ref_image_width FLOAT;

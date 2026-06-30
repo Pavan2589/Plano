@@ -7,7 +7,7 @@ logger.setLevel(logging.INFO)
 class CosineMatcher:
     def __init__(self):
         # Configure thresholds from environment variables
-        self.similarity_threshold = float(os.getenv("SIMILARITY_THRESHOLD", "0.75"))
+        self.similarity_threshold = float(os.getenv("SIMILARITY_THRESHOLD", "0.60"))
         self.row_tolerance = float(os.getenv("ROW_TOLERANCE", "50.0"))
         self.gap_threshold = float(os.getenv("GAP_THRESHOLD", "0.05"))
         logger.info(f"Initialized CosineMatcher: similarity_threshold={self.similarity_threshold}, row_tolerance={self.row_tolerance}, gap_threshold={self.gap_threshold}")
@@ -185,8 +185,8 @@ class CosineMatcher:
                         "detected_product_id": None,
                         "bbox": None
                     })
-                else:
-                    # Either correct matches exist but are fewer than required, OR wrong products exist.
+                elif wrong_count == 0:
+                    # Correct matches exist but are fewer than required, with no wrong products.
                     # This qualifies as a facing count violation.
                     violations.append({
                         "row": row_no,

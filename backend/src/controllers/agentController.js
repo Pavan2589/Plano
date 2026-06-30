@@ -97,6 +97,18 @@ const agentController = {
         planogramId = planoCheck.rows[0].id;
       }
 
+      // Verify the planogram has cells configured before queuing
+      const cellsCheck = await query(
+        'SELECT 1 FROM planogram_cells WHERE planogram_id = $1 LIMIT 1',
+        [planogramId]
+      );
+      if (cellsCheck.rows.length === 0) {
+        throw new ValidationError(
+          'This planogram has no products configured yet. Please set up the planogram layout before running a compliance check.',
+          'PLANOGRAM_NO_CELLS'
+        );
+      }
+
       // Process image using Sharp
       const processedBuffer = await sharp(file.buffer)
         .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
